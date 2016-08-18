@@ -26,13 +26,12 @@ class LearningAgent(Agent):
         self.trial_num = 0 # trials counter
         self.preformance_report = [] # list of tuples for report after run all trials
         self.moves = 0 # agent's moves during trial
-        self.trial_penalties_details = [] # list of sensors and agent penalties during trial
         
     def simplier_state(self, color, next_waypoint, other_agent_waypoints):
         # simlifier world state and get GoStatus
         state = 'stop'
         if color == 'red':
-            if next_waypoint == 'right' and other_agent_waypoints[1] != 'forward':
+            if next_waypoint == 'right' and other_agent_waypoints[2] != 'forward':
                 state = 'go'
             else:
                 state = 'stop'
@@ -64,7 +63,7 @@ class LearningAgent(Agent):
     
     def save_trial_performance(self):
         # save particular trial performance results
-        self.preformance_report.append([self.trial_num, self.trial_penalties, self.deadline, self.moves, self.trial_penalties_details])
+        self.preformance_report.append([self.trial_num, self.trial_penalties, self.env.get_deadline(self), self.moves - 1])
 
     def reset(self, destination=None):
         self.planner.route_to(destination)
@@ -75,10 +74,8 @@ class LearningAgent(Agent):
         
         self.trial_num += 1
         self.trial_penalties = 0.0
-        self.moves = 0
+        self.moves = 1
         self.epsilon = 0.1 # for e-greedy strategy
-        self.trial_penalties_details = []
-        self.deadline = 0
         
         # TODO: Prepare for a new trip; reset any variables here, if required
 
@@ -91,8 +88,8 @@ class LearningAgent(Agent):
         go_status = self.simplier_state(inputs['light'], self.next_waypoint, other_agentwaypoint)
         self.state = "{}_{}_{}_{}".format(inputs['light'], self.next_waypoint, go_status, curr_action)
                    
-        alpha = 1.0
-        gamma = 0.15
+        alpha = 0.15
+        gamma = 1.0
         
         # get old q value
         q_old =self.Q_matrix[self.prev_state][0]
@@ -116,10 +113,7 @@ class LearningAgent(Agent):
         features = list(self.Q_matrix[state][1:-1]) # ignore firs and last element in the list due it is Q value and state
         best_value = None
         
-        epsilon = 1.0/self.trial_num
-        #epsilon = 1.0/self.moves
-        
-        act_values = [] # temporary list for saving actions and q_values
+        epsilon = 1/self.moves
         
         if random.uniform(0, 1) < epsilon:
             # select random action
@@ -131,25 +125,17 @@ class LearningAgent(Agent):
             # get max Q value
             for action in self.actions:
                 state_query = "{}_{}_{}_{}".format(*(features + [action]))
-                #print "{}, {:.3f}, {}".format(action, self.Q_matrix[state_query][0], state_query)
-                q_value = self.Q_matrix[state_query][0]
-                act_values.append((q_value, action))
+                #print "{}, {:.3f}, {}".format(action, self.Q_matrix[state_query][0], state_query)             
                 if best_value is None:
                     best_action = action
-                    best_value = q_value
-                    
+                    best_value = self.Q_matrix[state_query][0]
                     continue
                 
                 if self.Q_matrix[state_query][0] > best_value:
                     best_action = action
-                    best_value = q_value
-        
-            # return best action and their Q value or select random action if there were more than one action with max Q value
-            to_choose = []
-            for q_value, action in act_values:
-                if q_value == best_value:
-                    to_choose.append((q_value, action))
-            _, action = to_choose[random.randint(0, len(to_choose) - 1)]
+                    best_value = self.Q_matrix[state_query][0]
+            
+        # return best action and their Q value
         
         
          
@@ -160,7 +146,7 @@ class LearningAgent(Agent):
         
         # Gather inputs
         inputs = self.env.sense(self)
-        self.deadline = self.env.get_deadline(self)
+        deadline = self.env.get_deadline(self)
         
         self.next_waypoint = self.planner.next_waypoint()  # from route planner, also displayed by simulator
         
@@ -210,24 +196,20 @@ class LearningAgent(Agent):
         
         # Execute action and get reward
         reward = self.env.act(self, action)
-        out_message = "deadline={}, sense={}, act={}, next_wp={}, reward={}".format(self.deadline, inputs, action, self.next_waypoint, reward)
         if reward < 0.0:
             self.trial_penalties += reward
-            self.trial_penalties_details.append(out_message)
         
         self.moves += 1 # increase moves of agent
         # TODO: Learn policy based on state, action, reward
         self.learn_policy(action, reward)        
         
-        print "LearningAgent.update():"+ out_message # [debug]
+        print "LearningAgent.update(): deadline = {}, inputs = {}, action = {}, reward = {}".format(deadline, inputs, action, reward)  # [debug]
 
     def show_performance_results(self, last_trials=10):
         # print N last trials' performance data
         result_list = self.preformance_report[-last_trials:]
         for line in result_list:
-            print "{} trial: penalties {:.3f}, deadline {}, moves: {}".format(*line[:-1])
-            for line in line[-1]:
-                print "    {}".format(line)
+            print "{} trial: penalties {:.3f}, deadline {}, moves: {}".format(*line)
 
 def run():
     """Run the agent for a finite number of trials."""
