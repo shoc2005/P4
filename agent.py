@@ -28,38 +28,21 @@ class LearningAgent(Agent):
         self.moves = 0 # agent's moves during trial
         self.trial_penalties_details = [] # list of sensors and agent penalties during trial
         
-    def simplier_state(self, color, next_waypoint, other_agent_waypoints):
-        # simlifier world state and get GoStatus
-        state = 'stop'
-        if color == 'red':
-            if next_waypoint == 'right' and other_agent_waypoints[1] != 'forward':
-                state = 'go'
-            else:
-                state = 'stop'
-        else:
-            state = 'go'
-            if next_waypoint == 'left' and other_agent_waypoints[0] == 'forward':
-                state == 'stop'
-            if next_waypoint == 'left' and other_agent_waypoints[0] == 'right':
-                state == 'stop'
-        
-        return state
-        
     
     def init_Q(self):
         # initialize Q_matrix
     
-        other_next_waypoints = list(itertools.product(['forward', 'left', 'right', None], repeat=3)) # get all combinations of other agent states
+        other_next_waypoints = list(itertools.product(['forward', 'left', 'right', None], repeat=3)) # get all combinations of other agent states [oncoming, left, right]
         
         print "Combinations count", len(other_next_waypoints)
         
         self.Q_matrix = {} # reset matrix
         for color in self.colors:
             for next_waypoint in self.directions:
-                for go_state in ['go', 'stop']: # other agent next waypoint
+                for other_traffic_state in other_next_waypoints:
                     for action in self.actions:
-                        key = "{}_{}_{}_{}".format(color, next_waypoint, go_state, action)
-                        self.Q_matrix[key] = (0.0, color, next_waypoint, go_state, action)
+                        key = "{}_{}_{}_{}".format(color, next_waypoint, "[{}.{}.{}]".format(*other_traffic_state), action)
+                        self.Q_matrix[key] = (0.0, color, next_waypoint, "[{}.{}.{}]".format(*other_traffic_state), action)
         print "Total states in Q matrix", len(self.Q_matrix.items())
     
     def save_trial_performance(self):
@@ -87,9 +70,8 @@ class LearningAgent(Agent):
         # learn policy using Q-Learning algorithm
                    
         inputs = self.env.sense(self)
-        other_agentwaypoint = "{}:{}:{}".format(inputs['oncoming'], inputs['left'], inputs['right'])
-        go_status = self.simplier_state(inputs['light'], self.next_waypoint, other_agentwaypoint)
-        self.state = "{}_{}_{}_{}".format(inputs['light'], self.next_waypoint, go_status, curr_action)
+        other_agent_waypoints = "[{}.{}.{}]".format(inputs['oncoming'], inputs['left'], inputs['right'])
+        self.state = "{}_{}_{}_{}".format(inputs['light'], self.next_waypoint, other_agent_waypoints, curr_action)
                    
         alpha = 1.0
         gamma = 0.15
@@ -165,9 +147,8 @@ class LearningAgent(Agent):
         self.next_waypoint = self.planner.next_waypoint()  # from route planner, also displayed by simulator
         
         # TODO: Update state
-        other_agent_waypoint = [inputs['oncoming'], inputs['right'], inputs['left']]
-        go_status = self.simplier_state(inputs['light'], self.next_waypoint, other_agent_waypoint)
-        self.prev_state = "{}_{}_{}_{}".format(inputs['light'], self.next_waypoint, go_status, 'forward')
+        other_agent_waypoints = "[{}.{}.{}]".format(inputs['oncoming'], inputs['left'], inputs['right'])
+        self.prev_state = "{}_{}_{}_{}".format(inputs['light'], self.next_waypoint, other_agent_waypoints, 'forward')
      
         
         # TODO: Select action according to your policy
@@ -239,7 +220,7 @@ def run():
     # NOTE: You can set enforce_deadline=False while debugging to allow longer trials
 
     # Now simulate it
-    sim = Simulator(e, update_delay=0.05, display=False)  # create simulator (uses pygame when display=True, if available)
+    sim = Simulator(e, update_delay=0.001, display=False)  # create simulator (uses pygame when display=True, if available)
     # NOTE: To speed up simulation, reduce update_delay and/or set display=False
     #e.act(a,'left')
     sim.run(n_trials=100)  # run for a specified number of trials
